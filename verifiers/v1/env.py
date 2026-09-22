@@ -217,6 +217,7 @@ class Env(ABC, Generic[ConfigT]):
                 interception=self._interception,
                 name=name,
                 shared_tools=self._shared_tools,
+                mcp_packages=self.config.mcp_packages,
                 task_cls=self._task_cls,
                 gate=gate,
                 completed=completed,
@@ -398,5 +399,9 @@ class Env(ABC, Generic[ConfigT]):
         if not servers:
             yield {}
             return
-        async with serve_shared(servers, harness_is_local=self._runs_local()) as shared:
+        async with serve_shared(
+            servers,
+            harness_is_local=self._runs_local(),
+            packages=self.config.mcp_packages,
+        ) as shared:
             yield shared
