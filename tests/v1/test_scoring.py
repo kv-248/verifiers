@@ -162,3 +162,19 @@ def test_parse_judge_choice_prefers_final_marker_then_boxed() -> None:
     assert (
         vf.parse_judge_choice("Draft: \\boxed{A}\nAnswer: B", choices=("A", "B")) == "A"
     )
+    # a leading label yields to explicit markers; without a terminator, it is prose,
+    # and a reason-first reply still takes the last mention
+    yes_no = ("yes", "no")
+    for reply, choice in [
+        ("Yes.\nFinal verdict: no", "no"),
+        ("No, wait.\nVerdict: yes", "yes"),
+        ("No other value, so yes", "yes"),
+        ("No? It gives 42, so yes", "yes"),
+        ("Yes/no: no", "no"),
+        ("No-brainer: it matches the reference, so yes.", "yes"),
+        ("It gives 41.\nYes, that is close to 42, but not equal, so no.", "no"),
+    ]:
+        assert vf.parse_judge_choice(reply, choices=yes_no) == choice, reply
+    # a one-character label may be a list marker, so it does not lead
+    per_option = "A. Response A is terse.\nB. Response B is complete.\nSo B."
+    assert vf.parse_judge_choice(per_option) == "B"

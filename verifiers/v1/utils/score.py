@@ -82,6 +82,18 @@ def parse_judge_choice(
         match = re.search(choice_re, text_upper[verdict.end() :])
         return choices_by_upper.get(match.group(1)) if match else None
 
+    # A reply that opens with a bare label ("Yes. It matches; no other value is
+    # stated.") leads with its verdict, so later mentions are explanation. A
+    # one-character label ("A.", "1.") is as likely a list marker as a verdict.
+    leading = re.match(
+        rf"[\s*`'\"#>]*{choice_re}[*`'\"]*{horizontal_space}*"
+        r"(?:[.,;:!\u2013\u2014]|-(?!\w)|$)",
+        text_upper,
+        re.MULTILINE,
+    )
+    if leading and len(leading.group(1)) > 1:
+        return choices_by_upper.get(leading.group(1))
+
     matches = re.findall(choice_re, text_upper)
     return choices_by_upper.get(matches[-1]) if matches else None
 

@@ -225,6 +225,16 @@ def test_reference_parse():
     judge = vf.ReferenceJudge()
     assert judge.parse(JudgeResponse(text="yes")) == 1.0
     assert judge.parse(JudgeResponse(text="Final answer: NO")) == 0.0
+    # a leading verdict is not overturned by the opposite word in its explanation
+    for reply, reward in [
+        ("Yes. It gives 42, matching the reference; no other value is stated.", 1.0),
+        ("No. It gives 41, not 42. Yes, if rounded, they'd be close.", 0.0),
+        ("No, the candidate says yes but is incorrect", 0.0),
+        ("**Yes** - no other value is stated.", 1.0),
+        ("Yes\n\nNo other value is stated.", 1.0),
+        ("Yes; no other value is stated.", 1.0),
+    ]:
+        assert judge.parse(JudgeResponse(text=reply)) == reward, reply
     # an unparseable verdict is a judge failure: raise (-> rollout error), don't score 0
     with pytest.raises(ValueError, match="no yes/no verdict"):
         judge.parse(JudgeResponse(text="gibberish"))
