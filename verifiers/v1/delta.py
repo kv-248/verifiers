@@ -12,7 +12,9 @@ a socket, a JSONL file, a queue. Both sides live here because the field lists tr
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+import pickle
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any, Self
 
@@ -53,6 +55,23 @@ def dump(model: BaseModel, **kwargs: Any) -> dict:
     return model.model_dump(mode="python", serialize_as_any=True, **kwargs)
 
 
+def _scalar_digest(value: Any) -> bytes | None:
+    """A digest of `value`, or None when it will not pickle.
+
+    `==` is the wrong check for a scalar the cursor already sent. A numpy array
+    compares elementwise, so the cursor's own array still compares equal after an
+    in-place write, and `1 == True`. The digest changes exactly when the pickled
+    value does. None matches nothing, so a value that will not pickle (an enum
+    defined in a scoring module loaded from a file) is sent again instead of
+    failing the flush.
+    """
+    try:
+        payload = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception:  # noqa: BLE001 - an unpicklable scalar is re-sent, not fatal
+        return None
+    return hashlib.blake2b(payload).digest()
+
+
 class TraceCursor:
     """What of one trace has been sent."""
 
@@ -62,7 +81,9 @@ class TraceCursor:
         self.sent = dict.fromkeys(LIST_FIELDS, 0)
         self.links: list[int] = []
         """Per sent node, how many of its semantic links have been sent."""
-        self.scalars: dict[str, Any] = {}
+        self.scalars: dict[str, bytes | None] = {}
+        """Digest of each scalar already sent. None: the value will not pickle, so it
+        is sent again at the next flush."""
         self.pending: list[dict] = []
 
     def copy(self) -> TraceCursor:
@@ -219,14 +240,12 @@ class DeltaStreamer:
                 cursor.sent[field] += len(items)
             changed = {}
             for field, value in dump(trace, include=set(SCALAR_FIELDS)).items():
-                try:
-                    same = cursor.scalars.get(field, ...) == value
-                except Exception:  # noqa: BLE001 - arrays and tensors in `info` compare elementwise
-                    same = False
-                if not same:
-                    changed[field] = value
+                digest = _scalar_digest(value)
+                if digest is not None and cursor.scalars.get(field) == digest:
+                    continue
+                changed[field] = value
+                cursor.scalars[field] = digest
             if changed:
-                cursor.scalars.update(changed)
                 delta["set"] = changed
             pending = [dump(message) for message in trace.pending]
             if pending != cursor.pending:

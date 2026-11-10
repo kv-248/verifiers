@@ -166,6 +166,27 @@ async def test_an_array_in_info_survives_a_grading_copy():
     assert assemble(sent).traces[trace.id]["info"]["arr"].tolist() == [7.0, 0.0]
 
 
+@pytest.mark.asyncio
+async def test_in_place_scalar_edits_are_streamed():
+    """The cursor must notice a write into a value it already sent.
+
+    `==` does not: the cursor holds the same numpy array, so an in-place edit still
+    compares equal, and `1 == True`, so that change is silent too."""
+    trace = make_trace(info={"arr": np.zeros(2), "flag": 1, "bit": 0})
+    streamer, sent = recorder([trace])
+    async with streamer:
+        streamer.watch(trace)
+        await settle()
+        trace.info["arr"][0] = 7.0
+        trace.info["flag"] = True
+        trace.info["bit"] = False
+        trace.notify()
+    info = assemble(sent).traces[trace.id]["info"]
+    assert info["arr"].tolist() == [7.0, 0.0]
+    assert info["flag"] is True
+    assert info["bit"] is False
+
+
 class EveryTrace(DeltaStreamer):
     """Diffs every watched trace at each flush, as the streamer did before it kept marks."""
 
