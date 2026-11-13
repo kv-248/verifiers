@@ -415,6 +415,44 @@ def test_branch_sampler_support_spans_every_token():
     assert Branch.model_construct(nodes=nodes[:1]).sampler_support is None
 
 
+def test_forked_output_tokens_count_each_call_once():
+    """A shared prefix call is one generation. Summing it once per branch trips
+    `max_output_tokens` before the rollout has produced that many tokens."""
+
+    def usage(prompt: int, completion: int) -> vf.Usage:
+        return vf.Usage(prompt_tokens=prompt, completion_tokens=completion)
+
+    trace = vf.Trace(
+        agent=vf.AgentInfo(config=vf.AgentConfig()),
+        task=vf.TraceTask(type="Task", data=vf.TaskData(idx=0, prompt="q")),
+        nodes=[
+            MessageNode(parent=None, message=UserMessage(content="q"), sampled=False),
+            MessageNode(
+                parent=0, message=AssistantMessage(content="shared"), sampled=True
+            ),
+            MessageNode(
+                parent=1, message=AssistantMessage(content="left"), sampled=True
+            ),
+            MessageNode(
+                parent=1, message=AssistantMessage(content="right"), sampled=True
+            ),
+        ],
+        calls=[
+            vf.ModelCall(node=1, usage=usage(2, 1)),
+            vf.ModelCall(node=2, usage=usage(3, 2)),
+            vf.ModelCall(node=3, usage=usage(3, 4)),
+        ],
+    )
+    # Each branch still reports its own path: 1+2 and 1+4.
+    assert [branch.num_output_tokens for branch in trace.branches] == [3, 5]
+    assert trace.usage is not None and trace.usage.completion_tokens == 7
+    assert trace.num_output_tokens == 7
+    assert trace.num_total_tokens == trace.num_input_tokens + trace.num_output_tokens
+    # 8 is above the 7 tokens actually generated, so the cap has not been reached.
+    assert RolloutLimits(max_output_tokens=8).reached(trace) is None
+    assert RolloutLimits(max_output_tokens=7).reached(trace) == "max_output_tokens"
+
+
 def test_max_turn_tokens_limit():
     limits = RolloutLimits(max_turn_tokens=16)
     trace = vf.Trace(
