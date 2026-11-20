@@ -25,15 +25,24 @@ def extract_boxed_answer(text: str, strict: bool = False) -> str:
         return "" if strict else text
 
     # Regex is the wrong tool for nested braces, so walk the final box by hand.
+    # A backslash escapes the next character: `\{` and `\}` are answer text, and
+    # `\\` is a literal backslash, so neither changes the nesting depth.
     answer_start = start + len(BOXED_START)
     depth = 1
-    for index, char in enumerate(text[answer_start:], start=answer_start):
+    index = answer_start
+    limit = len(text)
+    while index < limit:
+        char = text[index]
+        if char == "\\":
+            index += 2
+            continue
         if char == "{":
             depth += 1
         elif char == "}":
             depth -= 1
-        if depth == 0:
-            return text[answer_start:index]
+            if depth == 0:
+                return text[answer_start:index]
+        index += 1
 
     return "" if strict else text
 

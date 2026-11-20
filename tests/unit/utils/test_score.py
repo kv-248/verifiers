@@ -27,6 +27,35 @@ def test_parse_pytest_outcomes_strips_xfail_xpass_reasons() -> None:
     }
 
 
+def test_extract_boxed_answer_honors_escaped_braces() -> None:
+    # A backslash escapes the next character, so these braces are answer text.
+    assert (
+        vf.extract_boxed_answer(r"\boxed{\{1, 2\rbrace}", strict=True)
+        == r"\{1, 2\rbrace"
+    )
+    assert (
+        vf.extract_boxed_answer(r"\boxed{\lbrace 1, 2 \}}", strict=True)
+        == r"\lbrace 1, 2 \}"
+    )
+    assert vf.extract_boxed_answer(r"\boxed{\{a}", strict=True) == r"\{a"
+    assert vf.extract_boxed_answer(r"\boxed{a\}b}", strict=True) == r"a\}b"
+    # Real nesting, a doubled backslash, and the last box are unchanged.
+    assert (
+        vf.extract_boxed_answer(r"\boxed{\frac{1}{2}}", strict=True) == r"\frac{1}{2}"
+    )
+    assert vf.extract_boxed_answer(r"\boxed{\\}", strict=True) == r"\\"
+    assert (
+        vf.extract_boxed_answer(r"draft \boxed{1} final \boxed{9}", strict=True) == "9"
+    )
+    assert (
+        vf.verify_boxed_math_answer(
+            r"The answer is \boxed{\{1, 2\rbrace}.",
+            r"\{1, 2\rbrace",
+        )
+        == 1.0
+    )
+
+
 def test_parse_judge_choice_prefers_final_marker_then_boxed() -> None:
     assert (
         vf.parse_judge_choice(
