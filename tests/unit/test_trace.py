@@ -434,7 +434,7 @@ def test_max_turn_tokens_limit():
     assert trace.is_truncated
 
 
-@pytest.mark.parametrize("max_tokens,expected", [(None, 16), (8, 8), (64, 16)])
+@pytest.mark.parametrize("max_tokens,expected", [(None, 16), (0, 0), (8, 8), (64, 16)])
 def test_max_turn_tokens_caps_sampling(max_tokens, expected):
     spec = vf.AgentConfig(max_turn_tokens=16)
     sampling = vf.SamplingConfig(max_tokens=max_tokens)

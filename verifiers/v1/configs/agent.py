@@ -191,8 +191,11 @@ def resolve_agent(
     merged = {**defaults.model_dump(), **merge_defaults(defaults, overrides)}
     if spec.max_turn_tokens is not None:
         max_tokens = merged.get("max_tokens")
-        merged["max_tokens"] = min(
-            max_tokens or spec.max_turn_tokens, spec.max_turn_tokens
+        # `0` is a real limit. Only a missing cap falls back to the turn limit.
+        merged["max_tokens"] = (
+            spec.max_turn_tokens
+            if max_tokens is None
+            else min(max_tokens, spec.max_turn_tokens)
         )
     return spec.model_copy(
         update={
